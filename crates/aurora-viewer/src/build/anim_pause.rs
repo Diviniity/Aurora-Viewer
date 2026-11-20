@@ -42,6 +42,16 @@ pub fn paused_skeletons(world: &World, selection: &[ObjKey]) -> HashSet<Uuid> {
     paused
 }
 
+/// World context menus do not select attachments on other residents. Pause
+/// the avatar under the menu directly, without touching world movement.
+/// The caller merges this with the existing build-selection pauses.
+pub fn context_avatar(menu: Option<&crate::ui::context::ContextMenu>) -> Option<Uuid> {
+    match menu.map(|menu| &menu.target) {
+        Some(crate::ui::context::Target::Avatar { id, .. }) => Some(*id),
+        _ => None,
+    }
+}
+
 fn avatar_ancestor(world: &World, mut idx: usize) -> Option<Uuid> {
     for _ in 0..64 {
         let o = world.objects.get(idx)?;
@@ -158,5 +168,40 @@ mod tests {
         assert_eq!(select_type(&world, root), SelectType::Hud);
         let key = world.objects.get(root).unwrap().key;
         assert!(paused_skeletons(&world, &[key]).is_empty());
+    }
+
+    #[test]
+    fn avatar_world_context_menu_pauses_only_while_open() {
+        use crate::ui::context::{ContextMenu, Target};
+
+        let avatar = Uuid::from_u128(42);
+        let attachment = Uuid::from_u128(43);
+        let menu_for = |target| ContextMenu {
+            pos: egui::pos2(0.0, 0.0),
+            point: glam::Vec3::ZERO,
+            target,
+            pie_path: Vec::new(),
+            pie_input_frame: None,
+        };
+        let resident = menu_for(Target::Avatar {
+            id: avatar,
+            own: false,
+            attachment: None,
+        });
+        assert_eq!(context_avatar(Some(&resident)), Some(avatar));
+        let worn_object = menu_for(Target::Avatar {
+            id: avatar,
+            own: false,
+            attachment: Some(attachment),
+        });
+        assert_eq!(context_avatar(Some(&worn_object)), Some(avatar));
+        let ourselves = menu_for(Target::Avatar {
+            id: avatar,
+            own: true,
+            attachment: None,
+        });
+        assert_eq!(context_avatar(Some(&ourselves)), Some(avatar));
+        assert_eq!(context_avatar(Some(&menu_for(Target::Ground))), None);
+        assert_eq!(context_avatar(None), None, "closing the menu resumes animations");
     }
 }

@@ -11456,8 +11456,13 @@ impl App {
                     _ => {}
                 }
             }
-            // what carries an edited attachment stands still (pauseAssociatedAvatars)
+            // Preserve the existing pauses for edited attachments.
             self.scene.paused_skeletons = crate::build::anim_pause::paused_skeletons(&self.world, &self.build.selection);
+            // Like the Legacy Viewer, a resident's right-click menu pauses their
+            // animation locally. The simulator still updates position and rotation.
+            if let Some(avatar) = crate::build::anim_pause::context_avatar(self.context_menu.as_ref()) {
+                self.scene.paused_skeletons.insert(avatar);
+            }
             // the avatar whose part the poser shows, drawn from its meshes
             // (the joints go with the frame's parameters), or whose part
             // under the cursor it asks (part_pick.rs): its faces listed
