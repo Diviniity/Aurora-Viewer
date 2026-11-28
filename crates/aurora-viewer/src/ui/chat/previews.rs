@@ -229,6 +229,9 @@ pub struct Previews {
     revealed: HashSet<u64>,
     playing: Option<Playing>,
     lightbox: Option<Lightbox>,
+    /// Ctrl+W of Conversations' window outside, taken for the picture at
+    /// this frame of the interface ([`Self::lightbox_close_key_outside`]).
+    close_asked: Option<u64>,
     image_window: Option<Lightbox>,
     /// Offline capture: enlarge the first still/GIF, optionally zoomed/panned.
     demo_zoom: Option<String>,
@@ -257,6 +260,7 @@ impl Default for Previews {
             revealed: HashSet::new(),
             playing: None,
             lightbox: None,
+            close_asked: None,
             image_window: None,
             demo_zoom: std::env::var("AURORA_DEMO_PREVIEW_ZOOM").ok(),
         }
@@ -336,17 +340,38 @@ impl Previews {
     /// Before the conversation's editor and shortcuts receive keys.
     pub(super) fn lightbox_keys(&mut self, ctx: &egui::Context) {
         let owner = egui::Id::unique("conversations");
+        let frame = ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT);
+        let asked = self.close_asked.take() == Some(frame);
         if self.enlarged()
-            && ctx.memory(|m| m.top_modal_layer()).is_none()
-            && (crate::ui::close_key::take(ctx, egui::Id::unique("conversations"))
-                || (ctx
-                    .top_layer_id()
-                    .is_none_or(|layer| layer.id == owner || layer.id == owner.with("image_enlargement"))
-                    && ctx.input_mut(|i| {
-                        i.consume_key(egui::Modifiers::NONE, egui::Key::Escape) || i.consume_key(egui::Modifiers::COMMAND, egui::Key::W)
-                    })))
+            && (asked
+                || (ctx.memory(|m| m.top_modal_layer()).is_none()
+                    && (crate::ui::close_key::take(ctx, egui::Id::unique("conversations"))
+                        || (ctx
+                            .top_layer_id()
+                            .is_none_or(|layer| layer.id == owner || layer.id == owner.with("image_enlargement"))
+                            && ctx.input_mut(|i| {
+                                i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)
+                                    || i.consume_key(egui::Modifiers::COMMAND, egui::Key::W)
+                            })))))
         {
             self.close_lightbox(ctx);
+        }
+    }
+
+    /// In the viewer's pass, with Conversations in its window outside,
+    /// before that window is drawn. Ctrl+W pressed there is taken by the
+    /// window before its body runs and comes back at the interface's next
+    /// frame as the window's close key (`close_key::pressed_outside`): the
+    /// picture takes it first, as it does inside, or the whole window
+    /// closed with it. The picture itself is closed in the window's own
+    /// pass ([`Self::lightbox_keys`]), where the field that gets the
+    /// keyboard back is.
+    pub(super) fn lightbox_close_key_outside(&mut self, ctx: &egui::Context) {
+        if self.enlarged()
+            && ctx.memory(|m| m.top_modal_layer()).is_none()
+            && crate::ui::close_key::take(ctx, egui::Id::unique("conversations"))
+        {
+            self.close_asked = Some(ctx.cumulative_frame_nr_for(egui::ViewportId::ROOT));
         }
     }
 
