@@ -4279,8 +4279,12 @@ pub fn show(
     open: &mut bool,
 ) -> Vec<ConvAction> {
     let enlarged = st.previews.enlarged();
-    // outside, the window's own keys close the picture (in its body, below)
-    if !super::widgets::floater_outside(ctx, egui::Id::unique("conversations")) {
+    // outside, the window's own keys close the picture (in its body, below);
+    // its Ctrl+W comes back here as the window's close key, for the picture
+    // before the window
+    if super::widgets::floater_outside(ctx, egui::Id::unique("conversations")) {
+        st.previews.lightbox_close_key_outside(ctx);
+    } else {
         st.previews.lightbox_keys(ctx);
     }
     st.reorder.begin(ctx, world);

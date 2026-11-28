@@ -465,4 +465,34 @@ fn an_enlarged_picture_outside_is_drawn_and_closed_in_that_window() {
     });
     frame(&mut pv);
     assert!(!pv.enlarged(), "Escape in the window outside closes it");
+    // Ctrl+W there: the window takes the key before its body runs
+    // (`Floater::show_outside`) and hears it as its close key at the next
+    // frame. The picture must take it first, in the viewer's pass, and close
+    // in the window's; the window stays open.
+    let owner = egui::Id::unique("conversations");
+    pv.lightbox = Some(Lightbox::new(&ctx, "https://i.imgur.com/test.png".to_owned(), shown(&ctx)));
+    frame(&mut pv);
+    events.borrow_mut().push(egui::Event::Key {
+        key: egui::Key::W,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    });
+    let mut window_closed = false;
+    for _ in 0..2 {
+        let _ = run_pass(&ctx, input(vec![]), |ctx| {
+            crate::ui::close_key::begin(ctx);
+            pv.lightbox_close_key_outside(ctx);
+            window_closed |= crate::ui::close_key::take(ctx, owner);
+            ctx.show_viewport_immediate(outside, egui::ViewportBuilder::default(), |ui, _| {
+                crate::ui::close_key::pressed_outside(ui.ctx(), owner);
+                ui.label("the conversation");
+                pv.lightbox_keys(ui.ctx());
+                pv.lightbox(ui.ctx(), &p, Some(bounds));
+            });
+        });
+    }
+    assert!(!pv.enlarged(), "Ctrl+W in the window outside closes the picture");
+    assert!(!window_closed, "and leaves the Conversations window open");
 }
